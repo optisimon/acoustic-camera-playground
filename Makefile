@@ -4,7 +4,12 @@ CXXFLAGS += -O3 -g -march=native -mfpmath=sse -msse4a
 
 all: main
 
-main: main.cpp
+main: main.cpp ArgumentParser.cpp
 
 clean:
-	rm main
+	rm -f main
+
+test:
+	make clean
+	make
+	time ./main
