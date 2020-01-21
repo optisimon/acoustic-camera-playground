@@ -1,0 +1,78 @@
+TEST_BIN := acoustic_camera_unittest
+rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(subst *,%,$2),$d))
+TEST_SRC := $(call rwildcard,tests,*.cpp)
+
+TEST_PACKAGES := $(PACKAGES)
+
+TEST_LDFLAGS = $(shell env PKG_CONFIG_PATH=external pkg-config --libs $(TEST_PACKAGES)) -lpthread
+# -fopt-info-vec-missed -march=native -ftree-vectorize -ftree-vectorizer-verbose=2
+TEST_CFLAGS = -O3 -Wall -Wextra -ggdb -I src $(shell env PKG_CONFIG_PATH=external pkg-config --cflags $(TEST_PACKAGES))
+TEST_CPPFLAGS += -isystem $(GTEST_DIR)/include 
+TEST_CXXFLAGS = -std=c++14
+
+TEST_BUILDDIR := build/test
+TEST_OBJ := $(TEST_SRC:%.cpp=$(TEST_BUILDDIR)/%.o)
+TEST_DEP := $(TEST_OBJ:.o=.d)
+TEST_BUILDDIRS := $(sort $(dir $(TEST_OBJ) $(TEST_BUILDDIR)/$(TEST_BIN)))
+TEST_BUILDDIRS_T := $(addsuffix .touched,$(TEST_BUILDDIRS))
+
+.PHONY: test
+test: $(TEST_BIN)
+	./$(TEST_BIN)
+
+GTEST_DIR = /usr/src/gtest
+GTEST_HEADERS = /usr/include/gtest/*.h \
+                /usr/include/gtest/internal/*.h
+
+
+GTEST_SRCS_ = $(GTEST_DIR)/src/*.cc $(GTEST_DIR)/src/*.h $(GTEST_HEADERS)
+
+GTEST_BUILDDIR_ = build/gtest
+GTEST_BUILDDIRS_T_ = $(GTEST_BUILDDIR_)/.touched
+
+$(GTEST_BUILDDIR_)/gtest-all.o : $(GTEST_SRCS_) $(GTEST_BUILDDIRS_T_)
+	$(CXX) $(TEST_CPPFLAGS) -I$(GTEST_DIR) $(TEST_CXXFLAGS) -c \
+            $(GTEST_DIR)/src/gtest-all.cc -o $@
+
+$(GTEST_BUILDDIR_)/gtest_main.o : $(GTEST_SRCS_) $(GTEST_BUILDDIRS_T_)
+	$(CXX) $(TEST_CPPFLAGS) -I$(GTEST_DIR) $(TEST_CXXFLAGS) -c \
+            $(GTEST_DIR)/src/gtest_main.cc -o $@
+
+$(GTEST_BUILDDIR_)/gtest.a : $(GTEST_BUILDDIR_)/gtest-all.o $(GTEST_BUILDDIRS_T_)
+	$(AR) $(ARFLAGS) $@ $^
+
+$(GTEST_BUILDDIR_)/gtest_main.a: $(GTEST_BUILDDIR_)/gtest-all.o $(GTEST_BUILDDIR_)/gtest_main.o $(GTEST_BUILDDIRS_T_)
+	$(AR) $(ARFLAGS) $@ $^
+	
+$(GTEST_BUILDDIRS_T_):
+	mkdir -p $(dir $@)
+	touch  $@
+
+
+
+$(TEST_BIN): $(TEST_BUILDDIR)/$(TEST_BIN)
+	ln -fs $(TEST_BUILDDIR)/$(TEST_BIN) $(TEST_BIN)
+
+$(TEST_BUILDDIR)/$(TEST_BIN): $(filter-out build/bin/src/main.o,$(OBJ)) $(TEST_OBJ) $(GTEST_BUILDDIR_)/gtest_main.a
+	$(CXX) -o $@ $^ $(TEST_LDFLAGS)
+
+$(TEST_BUILDDIR)/%.o: %.cpp $(TEST_BUILDDIRS_T) Makefile
+	@$(CXX) $(TEST_CPPFLAGS) $(TEST_CXXFLAGS) $(TEST_CFLAGS) -c -o $@ $<
+
+$(TEST_BUILDDIRS_T):
+	@mkdir -p $(dir $@)
+	@touch  $@
+
+.PRECIOUS: $(TEST_BUILDDIR)/%.d
+$(TEST_BUILDDIR)/%.d: %.cpp
+	$(CPP) $(TEST_CPPFLAGS) $(TEST_CXXFLAGS) $(TEST_CFLAGS) $< -MM -MT $(@:.d=.o) >$@
+
+# Without this, gnu make will assume .touched files are intermediary
+# files and they would have been removed by gnu make on exit.
+#.PRECIOUS: $(BUILDDIR)/%.touched
+
+.PHONY: clean
+clean::
+	rm -rf build $(TEST_BUILDDIR) $(GTEST_BUILDDIR_) $(TEST_BIN)
+
+-include $(wildcard $(TEST_DEP))

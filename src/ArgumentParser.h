@@ -1,5 +1,8 @@
-#ifndef ARGUMENTPARSER_HH
-#define ARGUMENTPARSER_HH
+//
+// Copyright(C) 2020 Simon Gustafsson (optisimon.com)
+//
+
+#pragma once
 
 #include <string>
 #include <map>
@@ -162,6 +165,3 @@ public:
       @returns 1 if there was some error, otherwise 0*/
   int operator !();
 };
-
-
-#endif

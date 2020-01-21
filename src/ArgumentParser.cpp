@@ -1,3 +1,7 @@
+//
+// Copyright(C) 2020 Simon Gustafsson (optisimon.com)
+//
+
 #include "ArgumentParser.h"
 #include <stdlib.h>
 #include <iostream>
